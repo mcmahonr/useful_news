@@ -1,0 +1,26 @@
+{% extends 'base.html' %}
+{% block title %}{{ title }} News{% endblock %}
+
+{% block content %}
+    <div class="row">
+        {% for article in articles %}
+            <div class="card col-sm-6 col-md-4 col-lg-3">
+                {% if article.media_url %}
+                    <img src="{{ article.media_url }}" class="card-img-top">
+                    <div class="card-body">
+                        <h3 class="card-title"><a href="article.link">{{ article.title }}</a></h3>
+                        {% if article.author %}
+                            <h4 class="card-subtitle mb-2 text-muted">{{ article.author }}</h4>
+                        {% endif %}
+                        {% if article.pub_date %}
+                            <h5 class="card-subtitle mb-2 text-muted">{{ article.pub_date }}</h5>
+                        {% endif %}
+                        <p class="card-text">{{ article.description }}</p>
+                        <footer class="card-text text-muted">Tweets: {{ article.tweet_count }}</footer>
+                    </div>
+                {% endif %}
+            </div>
+
+        {% endfor %}
+    </div>
+{% endblock %}

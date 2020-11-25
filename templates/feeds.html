@@ -1,0 +1,129 @@
+{% extends 'base.html' %}
+
+{% block title %}Add Feed{% endblock %}
+
+{% block content %}
+    {% with messages = get_flashed_messages() %}
+        {% if messages %}
+            {% for message in messages %}
+                <div aria-live="polite" aria-atomic="true" style="position: relative; min-height: 200px">
+                    <div class="toast" role="alert" aria-live="assertive" aria-atomic="true" style="position: absolute; top: 0; right: 0">
+                        <div class="toast-header">
+                            <strong class="mr-auto">New Paper</strong>
+                            <button type="button" class="ml-2 mb-1 close" data-dismiss="toast" aria-label="Close">
+                                <span aria-hidden="true">&times;</span>
+                            </button>
+                        </div>
+                        <div class="toast-body">
+                            {{ message }}
+                        </div>
+                    </div>
+                </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <button class="btn btn-primary" type="button" data-toggle="modal" data-target="#addFeedModal">Add Feed</button>
+    <div>
+        <table class="table">
+            <thead>
+                <tr>
+                    <th scope="col">Feed Name</th>
+                    <th scope="col">Feed URL</th>
+                    <th scope="col">Categories</th>
+                    <th scope="col">Show In Front Page</th>
+                    <th scope="col">Added</th>
+                </tr>
+            </thead>
+            <tbody id="feed_table_body">
+            </tbody>
+        </table>
+    </div>
+
+
+    <div class="modal fade" id="addFeedModal" tabindex="-1" aria-labelledby="addFeedModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="addFeedModalLabel">New Feed</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                      <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <form method="post">
+                        <div class="form-group">
+                            <label for="feedName">Feed Name</label>
+                            <input type="text" class="form-control" name="feed_name" id="feedName" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="feedUrl">URL</label>
+                            <input type="text" class="form-control" name="feed_url" id="feedUrl" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="category">Category</label>
+                            <select multiple name="category" id="category" class="form-control">
+                                <option>Cyber Security</option>
+                                <option>Gov/Politics</option>
+                                <option>Local</option>
+                                <option>Baseball</option>
+                            </select>
+                        </div>
+                        <div class="form-group form-check">
+                            <input type="checkbox" class="form-check-input" name="in_frontpage" id="frontpage" checked>
+                            <label for="frontpage" class="form-check-label">Use in Front Page?</label>
+                        </div>
+                        <button class="btn btn-primary">Add</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}
+
+{% block scripts %}
+    <script type="module" src="{{ url_for('static', filename='js/es_api.js') }}"></script>
+    <script>
+        $(document).ready(function() {
+            $('.toast').toast('show');
+        });
+    </script>
+    <script>
+        let baseUrl = 'http://127.0.0.1:5000/cors/'
+        let request = new XMLHttpRequest();
+
+        function makeRow(feed) {
+            let data = feed._source;
+
+            let dt = new Date(data.added_on);
+
+            let fp = "";
+            if (data.is_frontpage) {
+                fp = "Yes";
+            } else {
+                fp = "No";
+            }
+
+            $("#feed_table_body").append(
+                '<tr>' +
+                '<td>' + data.name + '</td>' +
+                '<td>' + data.url + '</td>' +
+                '<td>' + data.categories + '</td>' +
+                '<td>' + fp + '</td>' +
+                '<td>' + dt.toLocaleString() + '</td>'
+            )
+        }
+
+        request.open('GET', baseUrl + 'http://localhost:9200/feed/_search');
+        request.responseType = 'json';
+        request.send();
+
+        request.onload = function() {
+            const r = request.response
+            const feeds = r.hits.hits
+
+            feeds.forEach(makeRow)
+
+        }
+    </script>
+{% endblock %}
