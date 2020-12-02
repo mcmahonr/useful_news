@@ -3,7 +3,7 @@ import datetime
 import requests
 import os
 from flask import Flask, render_template, request, flash
-from feed_reader import get_feed
+from es_manager import get_all_articles, get_feeds
 from es_manager import send_doc
 
 app = Flask(__name__)
@@ -25,12 +25,20 @@ def build_feed_json(feed_data):
 
 @app.route('/')
 def front_page():
-    return render_template('index.html', title='Front Page', articles=articles)
+    articles = get_all_articles()
+    return render_template('index.html', title='Front Page', articles=articles[:20])
 
 
-@app.route('/<fltr>')
+@app.route('/filtered/<fltr>')
 def news_filter(fltr):
-    return render_template('index.html', title=fltr)
+    filter_map = {'security': 'Cyber Security', 'politics': 'Gov/Politics', 'local': 'Local', 'baseball': 'Baseball'}
+    rss_feeds = get_feeds(category=filter_map[fltr])
+    articles = []
+    for feed in rss_feeds:
+        feed_ars = get_all_articles(feed=feed.get('name'))
+        for ar in feed_ars:
+            articles.append(ar)
+    return render_template('index.html', title=fltr, articles=articles)
 
 
 @app.route('/feeds', methods=['GET', 'POST'])

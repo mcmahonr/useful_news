@@ -1,56 +1,16 @@
 import requests
 import untangle
 import json
-import os
+import dateparser
 
-from es_manager import send_doc, get_all_articles, es_post
-
-
-def strip_protocol(link_url):
-    if link_url.startswith('http'):
-        if link_url.startswith('https'):
-            return link_url[12:]
-        else:
-            return link_url[11:]
-
-
-def tweet_search(q, next_token=None):
-    twitter_bearer = f'Bearer {os.environ.get("twitter_bearer")}'
-    search_url = 'https://api.twitter.com/2/tweets/search/recent'
-    headers = {'Authorization': twitter_bearer}
-    params = {'query': q, 'max_results': 100}
-    if next_token:
-        params['next_token'] = next_token
-
-    r = requests.get(search_url, headers=headers, params=params)
-    if r.status_code != 200:
-        if r.status_code == 429:
-            print(f'Rate Limit Hit. Resets in {r.headers}')
-        raise RuntimeError(f'Unable to get search results: {r.status_code} {r.text}')
-
-    results = r.json().get('meta')
-    return results.get('result_count'), results.get('next_token')
-
-
-def get_tweet_count(link_url):
-    link_url = strip_protocol(link_url)
-    count = 0
-    next_token = None
-    more_results = True
-    while more_results:
-        search_count, next_token = tweet_search(link_url, next_token=next_token)
-        count += search_count
-        if not next_token:
-            more_results = False
-
-    return count
+import es_manager
+from twitter_manager import get_tweet_count
 
 
 def get_xml(feed_url):
     r = requests.get(feed_url)
     if r.status_code not in (200, 201, 202, 203, 204):
-        raise RuntimeError(f'Unable to connect to RSS feed: {r.status_code} {r.text}')
-
+        raise RuntimeError(f'Unable to connect to RSS feed: {feed_url}\n{r.status_code}\n{r.text}')
     return r.content.decode('utf-8')
 
 
@@ -86,18 +46,23 @@ def get_description(article):
 
 def get_pub_date(article):
     try:
-        return article.pubDate.cdata
+        dt_str = article.pubDate.cdata
+        pub_date = dateparser.parse(dt_str)
+        return pub_date
     except AttributeError:
         return None
 
 
 def parse_article(rss_item, feed_name):
+    pub_date = get_pub_date(rss_item)
+    if pub_date:
+        pub_date = pub_date.strftime('%Y-%m-%dT%H:%M:%S%z')
     return {'title': rss_item.title.cdata,
             'description': get_description(rss_item),
             'link': rss_item.link.cdata,
             'media_url': get_media(rss_item),
             'author': get_author(rss_item),
-            'pub_date': get_pub_date(rss_item),
+            'pub_date': pub_date,
             'feed_name': feed_name,
             'tweet_count': 0}
 
@@ -131,18 +96,28 @@ def get_feed(feed_url, feed_name):
 def create_articles(feed_url, feed_name):
     articles = get_feed(feed_url, feed_name)
     for article in articles:
-        send_doc('articles', json.dumps(article))
+        es_manager.send_doc('articles', json.dumps(article))
 
 
 def update_tweet_count():
-    articles = get_all_articles()
+    articles = es_manager.get_all_articles()
     for article in articles:
         link = article.get('_source').get('link')
         doc_id = article.get('_id')
         tweet_count = get_tweet_count(link)
+        print(f'{article.get("_source").get("feed_name")}\n{link}\n{tweet_count}\n{"*" * len(link)}')
         params = {'script': {"source": "ctx._source.tweet_count += params.tweet_count",
                              "lang": "painless",
                              "params": {"tweet_count": tweet_count}}}
 
-        es_post(f'articles/_update/{doc_id}', data=json.dumps(params))
+        es_manager.es_post(f'articles/_update/{doc_id}', data=json.dumps(params))
 
+
+def sync_feeds(category=None):
+    feeds = es_manager.get_feeds(category=category)
+    for feed in feeds:
+        create_articles(feed.get('url'), feed.get('name'))
+
+
+if __name__ == '__main__':
+    sync_feeds()
