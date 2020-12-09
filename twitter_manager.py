@@ -11,11 +11,24 @@ def strip_protocol(link_url):
             return link_url[11:]
 
 
+def twitter_request(url, method, api_ver, **kwargs):
+    base_url = 'https://api.twitter.com'
+    t_url = f'{base_url}/{url}'
+    bearer = f'Bearer {os.environ.get("twitter_bearer")}'
+    oauth = os.environ.get('twitter_oauth')
+    if api_ver >= 2:
+        auth = bearer
+    else:
+        auth = oauth
+    headers = {'Authorization': auth}
+    methods = {'get': requests.get, 'post': requests.post, 'put': requests.put}
+    req_func = methods[method]
+    return req_func(t_url, headers=headers, **kwargs)
+
+
 def tweet_search_request(params):
-    twitter_bearer = f'Bearer {os.environ.get("twitter_bearer")}'
-    search_url = 'https://api.twitter.com/2/tweets/search/recent'
-    headers = {'Authorization': twitter_bearer}
-    r = requests.get(search_url, headers=headers, params=params)
+    search_url = '2/tweets/search/recent'
+    r = twitter_request(search_url, 'get', params=params)
     if r.status_code == 429:
         try:
             resets_time = int(r.headers.get('x-rate-limit-reset'))
@@ -53,3 +66,16 @@ def get_tweet_count(link_url):
         if not next_token:
             more_results = False
     return count
+
+
+def get_lists(user_id=None):
+    params = {'user_id': user_id}
+    url = '1.1/lists/list.json'
+    r = twitter_request(url, 'get', 1.1, params=params)
+    return r.json()
+
+
+def get_list_statuses(list_id, since_id=None, get_rts=True, get_entities=True):
+    params = {'list_id': list_id, 'since_id': since_id, 'include_entities': get_entities, 'include_rts': get_rts}
+    url = '1.1/lists/statuses.json'
+    return twitter_request(url, 'get', 1.1, params=params)
